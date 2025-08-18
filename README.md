@@ -1,5 +1,7 @@
 # 短信推送助手
 
+# 本项目完全由gpt5 和 kimi-k2 开发，作者不懂kotlin
+
 将手机短信转发到企业微信的Android应用。
 
 ## 功能
@@ -16,8 +18,4 @@
 ## 开发
 - 语言：Kotlin
 - 最低版本：Android 5.0 (API 21)
-
-## 构建
-```bash
-./gradlew assembleDebug
-```
+- 在小米15中测试通过，其他版本未测试
