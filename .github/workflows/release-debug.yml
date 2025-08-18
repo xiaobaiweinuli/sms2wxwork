@@ -1,0 +1,50 @@
+name: Release Debug APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
+
+      - name: Build debug APK
+        run: ./gradlew :app:assembleDebug --stacktrace
+
+      - name: Collect APK
+        run: |
+          ls -l app/build/outputs/apk/debug
+            APK_PATH=$(ls app/build/outputs/apk/debug/*.apk | head -n 1)
+            cp "$APK_PATH" sms2wxwork-debug-${GITHUB_REF_NAME}.apk
+            echo "apk_name=sms2wxwork-debug-${GITHUB_REF_NAME}.apk" >> $GITHUB_ENV
+            # 打印校验和
+            (sha256sum "$APK_PATH" || shasum -a 256 "$APK_PATH")
+
+      - name: Create / Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "sms2wxwork ${{
+            startsWith(github.ref_name, 'v') && github.ref_name || github.ref_name
+          }}"
+          draft: false
+          prerelease: false
+          files: |
+            sms2wxwork-debug-${{ github.ref_name }}.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
