@@ -9,11 +9,14 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
-import android.widget.Button
-import android.widget.EditText
-import android.widget.Switch
+import android.view.View
+import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import com.google.android.material.button.MaterialButton
+import androidx.appcompat.widget.SwitchCompat
+import com.google.android.material.textfield.TextInputEditText
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -30,13 +33,19 @@ class MainActivity : AppCompatActivity() {
         
         prefs = getSharedPreferences("config", Context.MODE_PRIVATE)
         
-        val numberInput = findViewById<EditText>(R.id.editNumber)
-        val saveButton = findViewById<Button>(R.id.btnSave)
-        val switchEnable = findViewById<Switch>(R.id.switchEnable)
-        val switchOnlyVerification = findViewById<Switch>(R.id.switchOnlyVerification)
+        val numberInput = findViewById<TextInputEditText>(R.id.editNumber)
+        val saveButton = findViewById<MaterialButton>(R.id.btnSave)
+        val switchEnable = findViewById<SwitchCompat>(R.id.switchEnable)
+        val switchOnlyVerification = findViewById<SwitchCompat>(R.id.switchOnlyVerification)
         val tvStatus = findViewById<TextView>(R.id.tvStatus)
         val tvPermissions = findViewById<TextView>(R.id.tvPermissions)
-        val btnCheckPermissions = findViewById<Button>(R.id.btnCheckPermissions)
+        val btnCheckPermissions = findViewById<MaterialButton>(R.id.btnCheckPermissions)
+        val ivExpandToggle = findViewById<ImageView>(R.id.ivExpandToggle)
+        val layoutInstructions = findViewById<LinearLayout>(R.id.layoutInstructions)
+        val ivConfigExpandToggle = findViewById<ImageView>(R.id.ivConfigExpandToggle)
+        val layoutConfigContent = findViewById<LinearLayout>(R.id.layoutConfigContent)
+        val ivSettingsExpandToggle = findViewById<ImageView>(R.id.ivSettingsExpandToggle)
+        val layoutSettingsContent = findViewById<LinearLayout>(R.id.layoutSettingsContent)
         
         updateUI(numberInput, switchEnable, switchOnlyVerification, tvStatus, tvPermissions)
         
@@ -100,6 +109,51 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "所有权限已授予", Toast.LENGTH_SHORT).show()
             }
         }
+
+        // 企业微信配置折叠展开功能
+        var isConfigExpanded = false
+        val configClickListener = View.OnClickListener {
+            isConfigExpanded = !isConfigExpanded
+            if (isConfigExpanded) {
+                layoutConfigContent.visibility = View.VISIBLE
+                ivConfigExpandToggle.setImageResource(R.drawable.ic_expand_less)
+            } else {
+                layoutConfigContent.visibility = View.GONE
+                ivConfigExpandToggle.setImageResource(R.drawable.ic_expand_more)
+            }
+        }
+        findViewById<LinearLayout>(R.id.layoutConfigHeader).setOnClickListener(configClickListener)
+        ivConfigExpandToggle.setOnClickListener(configClickListener)
+
+        // 功能设置折叠展开功能
+        var isSettingsExpanded = false
+        val settingsClickListener = View.OnClickListener {
+            isSettingsExpanded = !isSettingsExpanded
+            if (isSettingsExpanded) {
+                layoutSettingsContent.visibility = View.VISIBLE
+                ivSettingsExpandToggle.setImageResource(R.drawable.ic_expand_less)
+            } else {
+                layoutSettingsContent.visibility = View.GONE
+                ivSettingsExpandToggle.setImageResource(R.drawable.ic_expand_more)
+            }
+        }
+        findViewById<LinearLayout>(R.id.layoutSettingsHeader).setOnClickListener(settingsClickListener)
+        ivSettingsExpandToggle.setOnClickListener(settingsClickListener)
+
+        // 使用说明折叠展开功能
+        var isInstructionsExpanded = false
+        val instructionsClickListener = View.OnClickListener {
+            isInstructionsExpanded = !isInstructionsExpanded
+            if (isInstructionsExpanded) {
+                layoutInstructions.visibility = View.VISIBLE
+                ivExpandToggle.setImageResource(R.drawable.ic_expand_less)
+            } else {
+                layoutInstructions.visibility = View.GONE
+                ivExpandToggle.setImageResource(R.drawable.ic_expand_more)
+            }
+        }
+        findViewById<LinearLayout>(R.id.layoutInstructionsHeader).setOnClickListener(instructionsClickListener)
+        ivExpandToggle.setOnClickListener(instructionsClickListener)
         
         if (!checkAllPermissions()) {
             Log.d("MainActivity", "缺少权限，开始请求")
@@ -109,18 +163,18 @@ class MainActivity : AppCompatActivity() {
     
     override fun onResume() {
         super.onResume()
-        val numberInput = findViewById<EditText>(R.id.editNumber)
-        val switchEnable = findViewById<Switch>(R.id.switchEnable)
-        val switchOnlyVerification = findViewById<Switch>(R.id.switchOnlyVerification)
+        val numberInput = findViewById<TextInputEditText>(R.id.editNumber)
+        val switchEnable = findViewById<SwitchCompat>(R.id.switchEnable)
+        val switchOnlyVerification = findViewById<SwitchCompat>(R.id.switchOnlyVerification)
         val tvStatus = findViewById<TextView>(R.id.tvStatus)
         val tvPermissions = findViewById<TextView>(R.id.tvPermissions)
         updateUI(numberInput, switchEnable, switchOnlyVerification, tvStatus, tvPermissions)
     }
 
     private fun updateUI(
-        numberInput: EditText,
-        switchEnable: Switch,
-        switchOnlyVerification: Switch,
+        numberInput: TextInputEditText,
+        switchEnable: SwitchCompat,
+        switchOnlyVerification: SwitchCompat,
         tvStatus: TextView,
         tvPermissions: TextView
     ) {
