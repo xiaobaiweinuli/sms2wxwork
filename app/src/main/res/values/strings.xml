@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">短信推送助手</string>
+    <string name="notif_channel_name">短信推送</string>
+    <string name="notif_channel_desc">保持短信推送服务运行</string>
+    <string name="notif_title_enabled">短信推送已启用</string>
+    <string name="notif_content_running">应用在前台运行以确保短信可推送</string>
+    <string name="save">保存</string>
+    <string name="target_number_hint">输入企业微信机器人Webhook地址</string>
+    <string name="enable_forwarding">启用短信推送</string>
+    <string name="request_permissions">请求权限</string>
+</resources>
