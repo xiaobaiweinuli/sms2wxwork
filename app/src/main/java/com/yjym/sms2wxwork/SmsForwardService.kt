@@ -13,24 +13,35 @@ class SmsForwardService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channelId = "sms_forward_channel"
-            val channelName = "短信推送"
+            createNotificationChannel()
+            startForeground(NOTIFICATION_ID, createNotification())
+        }
+        return START_STICKY
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                channelId,
-                channelName,
+                CHANNEL_ID,
+                CHANNEL_NAME,
                 NotificationManager.IMPORTANCE_LOW
             )
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)
-
-            val notification = NotificationCompat.Builder(this, channelId)
-                .setContentTitle("短信推送服务")
-                .setContentText("正在运行中...")
-                .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .build()
-
-            startForeground(1, notification)
         }
-        return START_STICKY
+    }
+
+    private fun createNotification() = NotificationCompat.Builder(this, CHANNEL_ID)
+        .setContentTitle(NOTIFICATION_TITLE)
+        .setContentText(NOTIFICATION_TEXT)
+        .setSmallIcon(android.R.drawable.ic_dialog_info)
+        .build()
+
+    companion object {
+        private const val CHANNEL_ID = "sms_forward_channel"
+        private const val CHANNEL_NAME = "短信推送"
+        private const val NOTIFICATION_ID = 1
+        private const val NOTIFICATION_TITLE = "短信推送服务"
+        private const val NOTIFICATION_TEXT = "正在运行中..."
     }
 }

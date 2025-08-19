@@ -3,9 +3,10 @@ package com.yjym.sms2wxwork
 import android.Manifest
 import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
 import android.content.pm.PackageManager
+
 import android.os.Build
+import android.graphics.Color
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
@@ -21,9 +22,13 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.yjym.sms2wxwork.data.ConfigManager
+import com.yjym.sms2wxwork.utils.PermissionManager
+import com.yjym.sms2wxwork.WechatWorkNotifier
 
 class MainActivity : AppCompatActivity() {
-    private lateinit var prefs: SharedPreferences
+    private lateinit var configManager: ConfigManager
+
     private val PERMISSION_REQUEST_CODE = 1
     
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -31,7 +36,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         Log.d("MainActivity", "应用启动")
         
-        prefs = getSharedPreferences("config", Context.MODE_PRIVATE)
+        configManager = ConfigManager.getInstance(this)
         
         val numberInput = findViewById<TextInputEditText>(R.id.editNumber)
         val saveButton = findViewById<MaterialButton>(R.id.btnSave)
@@ -61,7 +66,7 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             
-            prefs.edit().putString("webhook_url", webhookUrl).apply()
+            configManager.webhookUrl = webhookUrl
             Log.d("MainActivity", "保存Webhook地址: $webhookUrl")
             Toast.makeText(this, "已保存Webhook地址", Toast.LENGTH_SHORT).show()
             updateUI(numberInput, switchEnable, switchOnlyVerification, tvStatus, tvPermissions)
@@ -69,13 +74,13 @@ class MainActivity : AppCompatActivity() {
         
         switchEnable.setOnCheckedChangeListener { _, isChecked ->
             Log.d("MainActivity", "切换开关状态: $isChecked")
-            if (isChecked && !checkAllPermissions()) {
+            if (isChecked && !PermissionManager.hasAllPermissions(this)) {
                 switchEnable.isChecked = false
                 requestAllPermissions()
                 return@setOnCheckedChangeListener
             }
             
-            prefs.edit().putBoolean("enabled", isChecked).apply()
+            configManager.isEnabled = isChecked
             val svc = Intent(this, SmsForwardService::class.java)
             
             if (isChecked) {
@@ -97,13 +102,13 @@ class MainActivity : AppCompatActivity() {
         
         switchOnlyVerification.setOnCheckedChangeListener { _, isChecked ->
             Log.d("MainActivity", "切换仅验证码开关状态: $isChecked")
-            prefs.edit().putBoolean("only_verification_codes", isChecked).apply()
+            configManager.onlyVerificationCodes = isChecked
             updateUI(numberInput, switchEnable, switchOnlyVerification, tvStatus, tvPermissions)
         }
         
         btnCheckPermissions.setOnClickListener {
             Log.d("MainActivity", "检查权限按钮点击")
-            if (!checkAllPermissions()) {
+            if (!PermissionManager.hasAllPermissions(this)) {
                 requestAllPermissions()
             } else {
                 Toast.makeText(this, "所有权限已授予", Toast.LENGTH_SHORT).show()
@@ -113,36 +118,43 @@ class MainActivity : AppCompatActivity() {
         // 企业微信配置折叠展开功能
         var isConfigExpanded = false
         val configClickListener = View.OnClickListener {
-            isConfigExpanded = !isConfigExpanded
-            if (isConfigExpanded) {
-                layoutConfigContent.visibility = View.VISIBLE
-                ivConfigExpandToggle.setImageResource(R.drawable.ic_expand_less)
-            } else {
-                layoutConfigContent.visibility = View.GONE
-                ivConfigExpandToggle.setImageResource(R.drawable.ic_expand_more)
+            // 检查点击的是否是卡片内部的交互元素
+            if (it !is TextInputEditText && it !is com.google.android.material.button.MaterialButton) {
+                isConfigExpanded = !isConfigExpanded
+                if (isConfigExpanded) {
+                    layoutConfigContent.visibility = View.VISIBLE
+                    ivConfigExpandToggle.setImageResource(R.drawable.ic_expand_less)
+                } else {
+                    layoutConfigContent.visibility = View.GONE
+                    ivConfigExpandToggle.setImageResource(R.drawable.ic_expand_more)
+                }
             }
         }
-        findViewById<LinearLayout>(R.id.layoutConfigHeader).setOnClickListener(configClickListener)
+        findViewById<com.google.android.material.card.MaterialCardView>(R.id.cardConfig).setOnClickListener(configClickListener)
         ivConfigExpandToggle.setOnClickListener(configClickListener)
 
         // 功能设置折叠展开功能
         var isSettingsExpanded = false
         val settingsClickListener = View.OnClickListener {
-            isSettingsExpanded = !isSettingsExpanded
-            if (isSettingsExpanded) {
-                layoutSettingsContent.visibility = View.VISIBLE
-                ivSettingsExpandToggle.setImageResource(R.drawable.ic_expand_less)
-            } else {
-                layoutSettingsContent.visibility = View.GONE
-                ivSettingsExpandToggle.setImageResource(R.drawable.ic_expand_more)
+            // 检查点击的是否是卡片内部的交互元素
+            if (it !is androidx.appcompat.widget.SwitchCompat) {
+                isSettingsExpanded = !isSettingsExpanded
+                if (isSettingsExpanded) {
+                    layoutSettingsContent.visibility = View.VISIBLE
+                    ivSettingsExpandToggle.setImageResource(R.drawable.ic_expand_less)
+                } else {
+                    layoutSettingsContent.visibility = View.GONE
+                    ivSettingsExpandToggle.setImageResource(R.drawable.ic_expand_more)
+                }
             }
         }
-        findViewById<LinearLayout>(R.id.layoutSettingsHeader).setOnClickListener(settingsClickListener)
+        findViewById<com.google.android.material.card.MaterialCardView>(R.id.cardSettings).setOnClickListener(settingsClickListener)
         ivSettingsExpandToggle.setOnClickListener(settingsClickListener)
 
         // 使用说明折叠展开功能
         var isInstructionsExpanded = false
         val instructionsClickListener = View.OnClickListener {
+            // 使用说明卡片内没有交互元素，直接处理点击
             isInstructionsExpanded = !isInstructionsExpanded
             if (isInstructionsExpanded) {
                 layoutInstructions.visibility = View.VISIBLE
@@ -152,10 +164,10 @@ class MainActivity : AppCompatActivity() {
                 ivExpandToggle.setImageResource(R.drawable.ic_expand_more)
             }
         }
-        findViewById<LinearLayout>(R.id.layoutInstructionsHeader).setOnClickListener(instructionsClickListener)
+        findViewById<com.google.android.material.card.MaterialCardView>(R.id.cardInstructions).setOnClickListener(instructionsClickListener)
         ivExpandToggle.setOnClickListener(instructionsClickListener)
         
-        if (!checkAllPermissions()) {
+        if (!PermissionManager.hasAllPermissions(this)) {
             Log.d("MainActivity", "缺少权限，开始请求")
             requestAllPermissions()
         }
@@ -178,19 +190,23 @@ class MainActivity : AppCompatActivity() {
         tvStatus: TextView,
         tvPermissions: TextView
     ) {
-        numberInput.setText(prefs.getString("webhook_url", ""))
-        switchEnable.isChecked = prefs.getBoolean("enabled", false)
-        switchOnlyVerification.isChecked = prefs.getBoolean("only_verification_codes", false)
+        numberInput.setText(configManager.webhookUrl)
+        switchEnable.isChecked = configManager.isEnabled
+        switchOnlyVerification.isChecked = configManager.onlyVerificationCodes
         
-        val webhookUrl = prefs.getString("webhook_url", "") ?: ""
-        val enabled = prefs.getBoolean("enabled", false)
-        val onlyVerification = prefs.getBoolean("only_verification_codes", false)
+        val webhookUrl = configManager.webhookUrl
+        val enabled = configManager.isEnabled
+        val onlyVerification = configManager.onlyVerificationCodes
         
-        tvStatus.text = when {
-            !enabled -> "状态：未启用"
-            webhookUrl.isEmpty() -> "状态：未设置企业微信Webhook"
-            onlyVerification -> "状态：已启用，仅推送验证码短信"
-            else -> "状态：已启用，推送全部短信"
+        if (!enabled) {
+            tvStatus.text = "状态：已禁用"
+            tvStatus.setTextColor(Color.RED)
+        } else if (webhookUrl.isEmpty()) {
+            tvStatus.text = "状态：未配置Webhook地址"
+            tvStatus.setTextColor(Color.RED)
+        } else {
+            tvStatus.text = "状态：已启用"
+            tvStatus.setTextColor(Color.GREEN)
         }
         
         val permissions = listOf(
@@ -199,66 +215,17 @@ class MainActivity : AppCompatActivity() {
         )
         
         val permissionStatus = permissions.map { (permission, name) ->
-            val granted = ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+            val granted = ContextCompat.checkSelfPermission(this, permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
             "$name: ${if (granted) "已授权" else "未授权"}"
         }.joinToString("\n")
         
         tvPermissions.text = "权限状态：\n$permissionStatus"
     }
 
-    // 不再使用电话号码验证，使用Webhook URL验证
-
-    private fun checkAllPermissions(): Boolean {
-        val permissions = mutableListOf(
-            Manifest.permission.RECEIVE_SMS,
-            Manifest.permission.READ_SMS,
-            Manifest.permission.READ_PHONE_STATE
-        )
-        
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-        }
-        
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            permissions.add(Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
-        }
-        
-        return permissions.all {
-            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
-        }
-    }
-
     private fun requestAllPermissions() {
-        val permissions = mutableListOf(
-            Manifest.permission.RECEIVE_SMS,
-            Manifest.permission.READ_SMS,
-            Manifest.permission.READ_PHONE_STATE
-        )
-        
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-        }
-        
-        val neededPermissions = permissions.filter { 
-            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED 
-        }
-        
-        if (neededPermissions.isNotEmpty()) {
-            ActivityCompat.requestPermissions(
-                this, 
-                neededPermissions.toTypedArray(), 
-                PERMISSION_REQUEST_CODE
-            )
-        }
-        
-        // 请求电池优化白名单
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val powerManager = getSystemService(POWER_SERVICE) as android.os.PowerManager
-            if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
-                val intent = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
-                intent.data = android.net.Uri.parse("package:$packageName")
-                startActivity(intent)
-            }
+        val missingPermissions = PermissionManager.getMissingPermissions(this)
+        if (missingPermissions.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, missingPermissions.toTypedArray(), PERMISSION_REQUEST_CODE)
         }
     }
 

@@ -2,86 +2,135 @@ package com.yjym.sms2wxwork
 
 import android.content.Context
 import android.util.Log
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import org.json.JSONObject
-import java.io.OutputStreamWriter
-import java.net.HttpURLConnection
-import java.net.URL
-import java.net.URLEncoder
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.IOException
+import java.util.concurrent.TimeUnit
+import com.yjym.sms2wxwork.network.NetworkManager
 
-class WechatWorkNotifier {
-    companion object {
-        private const val TAG = "WechatWorkNotifier"
+/**
+ * 企业微信消息通知器
+ * 职责：负责将短信内容格式化为企业微信消息并发送
+ */
+object WechatWorkNotifier {
+    private const val TAG = "WechatWorkNotifier"
+    
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .writeTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
+        .build()
+
+    /**
+     * 发送短信消息到企业微信
+     * @param webhookUrl 企业微信机器人Webhook地址
+     * @param sender 短信发送方号码
+     * @param content 短信内容
+     * @return 是否发送成功
+     */
+    fun sendMessage(context: Context, webhookUrl: String, sender: String, content: String): Boolean {
+        if (webhookUrl.isEmpty()) {
+            Log.w(TAG, "Webhook地址为空")
+            return false
+        }
         
-        suspend fun sendMessage(context: Context, webhookUrl: String, sender: String, content: String): Boolean {
-            return withContext(Dispatchers.IO) {
-                try {
-                    val url = URL(webhookUrl)
-                    val connection = url.openConnection() as HttpURLConnection
-                    
-                    connection.apply {
-                        requestMethod = "POST"
-                        setRequestProperty("Content-Type", "application/json; charset=UTF-8")
-                        setRequestProperty("Accept", "application/json")
-                        doOutput = true
-                        connectTimeout = 10000
-                        readTimeout = 15000
-                    }
-                    
-                    val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-                    val currentTime = dateFormat.format(Date())
-                    
-                    val message = """
-                        **收到新短信**
-                        
-                        **发件人：** $sender
-                        **内容：** ${content.trim()}
-                        **时间：** $currentTime
-                        
-                        ---
-                        来自短信转发器
-                    """.trimIndent()
-                    
-                    val jsonPayload = JSONObject().apply {
-                        put("msgtype", "markdown")
-                        put("markdown", JSONObject().apply {
-                            put("content", message)
-                        })
-                    }
-                    
-                    OutputStreamWriter(connection.outputStream, "UTF-8").use { writer ->
-                        writer.write(jsonPayload.toString())
-                        writer.flush()
-                    }
-                    
-                    val responseCode = connection.responseCode
-                    val responseMessage = connection.responseMessage
-                    
-                    Log.d(TAG, "企业微信推送响应码: $responseCode, 消息: $responseMessage")
-                    
-                    if (responseCode == HttpURLConnection.HTTP_OK) {
-                        Log.d(TAG, "消息成功推送到企业微信")
-                        true
-                    } else {
-                        Log.e(TAG, "推送失败: HTTP $responseCode - $responseMessage")
-                        false
-                    }
-                    
-                } catch (e: Exception) {
-                    Log.e(TAG, "推送消息时发生异常", e)
-                    false
+        if (!NetworkManager.isNetworkAvailable(context)) {
+            Log.w(TAG, "网络不可用")
+            return false
+        }
+        
+        val message = buildMessageContent(sender, content)
+        return sendToWechatWork(webhookUrl, message)
+    }
+    
+    /**
+     * 构建企业微信Markdown消息内容
+     */
+    private fun buildMessageContent(sender: String, content: String): String {
+        val escapedSender = escapeMarkdown(sender)
+        val escapedContent = escapeMarkdown(content)
+        
+        return """
+            ## 📱 收到新短信
+            
+            **发送号码:** `$escapedSender`
+            
+            **短信内容:**
+            ```
+            $escapedContent
+            ```
+            
+            **接收时间:** ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())}
+        """.trimIndent()
+    }
+    
+    /**
+     * 转义Markdown特殊字符
+     */
+    private fun escapeMarkdown(text: String): String {
+        return text.replace("`", "\\`")
+                  .replace("*", "\\*")
+                  .replace("_", "\\_")
+                  .replace("#", "\\#")
+                  .replace("[", "\\[")
+                  .replace("]", "\\]")
+                  .replace("(", "\\(")
+                  .replace(")", "\\)")
+                  .replace("~", "\\~")
+                  .replace(">", "\\>")
+                  .replace("-", "\\-")
+                  .replace("=", "\\=")
+                  .replace("|", "\\|")
+                  .replace("{", "\\{")
+                  .replace("}", "\\}")
+                  .replace(".", "\\.")
+                  .replace("!", "\\!")
+    }
+    
+    /**
+     * 发送消息到企业微信
+     */
+    private fun sendToWechatWork(webhookUrl: String, message: String): Boolean {
+        val json = """
+            {
+                "msgtype": "markdown",
+                "markdown": {
+                    "content": "$message"
                 }
             }
-        }
+        """.trimIndent()
         
-        fun isValidWebhookUrl(url: String): Boolean {
-            return url.startsWith("https://qyapi.weixin.qq.com/cgi-bin/webhook/send") ||
-                   url.contains("weixin") ||
-                   url.contains("qyapi")
+        val requestBody = json.toRequestBody("application/json; charset=utf-8".toMediaType())
+        
+        val request = Request.Builder()
+            .url(webhookUrl)
+            .post(requestBody)
+            .addHeader("Content-Type", "application/json")
+            .build()
+            
+        return try {
+            client.newCall(request).execute().use { response ->
+                val success = response.isSuccessful
+                if (success) {
+                    Log.d(TAG, "消息发送成功")
+                } else {
+                    Log.e(TAG, "消息发送失败: ${response.code} ${response.message}")
+                }
+                success
+            }
+        } catch (e: IOException) {
+            Log.e(TAG, "网络请求异常", e)
+            false
+        } catch (e: Exception) {
+            Log.e(TAG, "发送消息异常", e)
+            false
         }
+    }
+    
+    fun isValidWebhookUrl(url: String): Boolean {
+        return url.startsWith("https://qyapi.weixin.qq.com/cgi-bin/webhook/send") ||
+               url.startsWith("https://work.weixin.qq.com/cgi-bin/webhook/send")
     }
 }
